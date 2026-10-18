@@ -187,6 +187,7 @@ def create_registration(occurrence, *, actor=None, member=None, visitor_data=Non
                 if not visitor_data:
                     raise ValidationError('Les coordonnées du visiteur sont obligatoires.')
                 person = Person.objects.create(
+                    organization=locked_occurrence.event.organization,
                     first_name=visitor_data['first_name'],
                     last_name=visitor_data['last_name'],
                     email=visitor_data.get('email') or None,

@@ -13,6 +13,8 @@ class FamilyMemberService:
             raise ValueError('Famille invalide.')
         if not isinstance(person, Person):
             raise ValueError('Personne invalide.')
+        if person.organization_id != family.organization_id:
+            raise ValidationError('La personne doit appartenir à la même organisation que la famille.')
 
         if FamilyMember.objects.filter(family=family, person=person).exists():
             raise ValidationError('Cette personne est déjà associée à cette famille.')

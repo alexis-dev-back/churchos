@@ -32,7 +32,7 @@ class FamilyApiTests(APITestCase):
         self.assertEqual(family_response.data['neighborhood'], 'Cocody')
         self.assertEqual(family_response.data['ministry'], 'Louange & Adoration')
 
-        person = Person.objects.create(first_name='Jean', last_name='Kouassi', email='jean@example.com')
+        person = Person.objects.create(organization=self.organization, first_name='Jean', last_name='Kouassi', email='jean@example.com')
         member_response = self.client.post(f"/api/families/{family_response.data['id']}/members/", {
             'person': str(person.id),
             'relationship_type': 'HEAD',
@@ -51,6 +51,7 @@ class FamilyApiTests(APITestCase):
             status=Family.Status.FOLLOW_UP,
         )
         person = Person.objects.create(
+            organization=self.organization,
             first_name='Jean',
             last_name='Kouassi',
             phone='+22502020202',
@@ -75,7 +76,7 @@ class FamilyApiTests(APITestCase):
 
     def test_delete_family_removes_its_memberships(self):
         family = Family.objects.create(organization=self.organization, name='Famille à supprimer')
-        person = Person.objects.create(first_name='Jean', last_name='Kouassi')
+        person = Person.objects.create(organization=self.organization, first_name='Jean', last_name='Kouassi')
         FamilyMember.objects.create(family=family, person=person)
 
         response = self.client.delete(f'/api/families/{family.id}/')
@@ -86,7 +87,7 @@ class FamilyApiTests(APITestCase):
 
     def test_adding_person_twice_returns_validation_error_instead_of_server_error(self):
         family = Family.objects.create(organization=self.organization, name='Famille Kouassi')
-        person = Person.objects.create(first_name='Jean', last_name='Kouassi', email='jean@example.com')
+        person = Person.objects.create(organization=self.organization, first_name='Jean', last_name='Kouassi', email='jean@example.com')
         payload = {
             'person': str(person.id),
             'relationship_type': 'HEAD',
@@ -99,6 +100,42 @@ class FamilyApiTests(APITestCase):
         self.assertEqual(first_response.status_code, 201, first_response.data)
         self.assertEqual(duplicate_response.status_code, 400, duplicate_response.data)
         self.assertEqual(FamilyMember.objects.filter(family=family, person=person).count(), 1)
+
+    def test_person_from_another_organization_cannot_be_added_to_family(self):
+        family = Family.objects.create(organization=self.organization, name='Famille locale')
+        other_organization = Organization.objects.create(name='Autre organisation', slug='autre-organisation')
+        foreign_person = Person.objects.create(
+            organization=other_organization,
+            first_name='Jean',
+            last_name='Kouassi',
+        )
+
+        response = self.client.post(f'/api/families/{family.id}/members/', {
+            'person': str(foreign_person.id),
+            'relationship_type': 'HEAD',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(FamilyMember.objects.filter(family=family, person=foreign_person).exists())
+
+    def test_legacy_cross_organization_family_membership_is_not_exposed(self):
+        family = Family.objects.create(organization=self.organization, name='Famille locale')
+        other_organization = Organization.objects.create(name='Autre organisation', slug='autre-organisation')
+        foreign_person = Person.objects.create(
+            organization=other_organization,
+            first_name='Jean',
+            last_name='Kouassi',
+        )
+        FamilyMember.objects.create(family=family, person=foreign_person, relationship_type='HEAD')
+
+        family_detail = self.client.get(f'/api/families/{family.id}/')
+        members = self.client.get(f'/api/families/{family.id}/members/')
+
+        self.assertEqual(family_detail.status_code, 200)
+        self.assertEqual(family_detail.data['member_count'], 0)
+        self.assertIsNone(family_detail.data['primary_contact_name'])
+        self.assertEqual(members.status_code, 200)
+        self.assertEqual(members.data, [])
 
     def test_add_direct_church_member_to_family(self):
         church = Church.objects.create(organization=self.organization, name='Church', slug='church')

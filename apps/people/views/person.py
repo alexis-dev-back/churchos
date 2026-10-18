@@ -9,14 +9,16 @@ from apps.people.models import Person
 from apps.people.serializers import PersonSerializer
 from apps.people.services.person_service import PersonService
 from apps.members.permissions import IsTenantAdmin
+from infrastructure.tenancy import TenantContext
 
 
 class PersonListCreateView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get(self, request):
+        organization = TenantContext.get()
         q = request.query_params.get('q', '').strip()
-        qs = Person.objects.all()
+        qs = Person.objects.filter(organization=organization)
         if q:
             qs = qs.filter(
                 Q(first_name__icontains=q) |
@@ -28,8 +30,11 @@ class PersonListCreateView(APIView):
         return Response(serializer.data)
 
     def post(self, request):
+        organization = TenantContext.get()
+        if organization is None:
+            return Response({'detail': 'Aucune organisation active n’a été sélectionnée.'}, status=status.HTTP_400_BAD_REQUEST)
         data = request.data.copy()
-        duplicates = PersonService.find_duplicates(data)
+        duplicates = PersonService.find_duplicates(data, organization)
         if duplicates.exists():
             return Response(
                 {
@@ -41,7 +46,7 @@ class PersonListCreateView(APIView):
 
         serializer = PersonSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        person = PersonService.create_person(serializer.validated_data)
+        person = PersonService.create_person(serializer.validated_data, organization)
         return Response(PersonSerializer(person).data, status=status.HTTP_201_CREATED)
 
 
@@ -49,7 +54,7 @@ class PersonDetailView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get_object(self, pk):
-        return Person.objects.filter(pk=pk).first()
+        return Person.objects.filter(pk=pk, organization=TenantContext.get()).first()
 
     def get(self, request, pk):
         person = self.get_object(pk)
@@ -71,7 +76,7 @@ class PersonCreateMembershipView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def post(self, request, pk):
-        person = Person.objects.filter(pk=pk).first()
+        person = Person.objects.filter(pk=pk, organization=TenantContext.get()).first()
         if person is None:
             return Response({'detail': 'Personne introuvable.'}, status=status.HTTP_404_NOT_FOUND)
 

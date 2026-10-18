@@ -37,6 +37,17 @@ class FamilyMemberSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError('Le membre doit appartenir à la même organisation que la famille.')
         return member
 
+    def validate_person(self, person):
+        if person is None:
+            return person
+        family_id = self.initial_data.get('family')
+        if family_id:
+            from apps.families.models import Family
+            family = Family.objects.filter(pk=family_id).first()
+            if family is not None and person.organization_id != family.organization_id:
+                raise serializers.ValidationError('La personne doit appartenir à la même organisation que la famille.')
+        return person
+
     def get_person_name(self, membership):
         return str(membership.person) if membership.person_id else None
 
