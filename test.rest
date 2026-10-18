@@ -1,0 +1,147 @@
+GET http://127.0.0.1:8000/api/auth/me/
+content-type : application/json
+
+{
+    "username": "alexis",
+    "email": "alexis@example.com"
+}
+
+###
+POST http://127.0.0.1:8000/api/auth/login/
+content-type: application/json
+
+
+{
+    "username": "Manuella",
+    "password": "motdepasse123"
+}
+
+###
+POST http://127.0.0.1:8000/api/auth/refresh/
+content-type: application/json
+
+{
+    "refresh": "<refresh_token>"
+}
+
+###
+POST http://127.0.0.1:8000/api/auth/register/
+content-type : application/json
+
+{
+    "username": "Manuella",
+    "email": "manuella@example.com",
+    "password": "motdepasse123"
+}
+
+
+###
+//Création d'un utilisateur owner
+POST http://127.0.0.1:8000/api/auth/register/
+content-type : application/json
+
+  {
+    "username": "owner1",
+    "email": "owner1@example.com",
+    "password": "password@123"
+  }
+
+###
+//Connexion de l'utilisateur owner
+POST http://127.0.0.1:8000/api/auth/login/
+content-type : application/json
+
+  {
+    "username": "owner1",
+    "password": "password@123"
+  }
+
+//Création d'un membre
+###
+POST http://127.0.0.1:8000/api/members/
+content-type : application/json
+
+
+  {
+    "first_name": "Emmanuel",
+    "last_name": "Bourgois",
+    "email": "emmanuel@example.com",
+    "phone": "+22501020305",
+    "gender": "M",
+    "date_of_birth": "2000-01-15",
+    "church": "eb9ec83f-8e4a-4d8a-af4f-1cd7fe5e4a3e",
+    "campus": "e7ccf0c2-1be8-4bc5-a301-d0f4e8e0f4a2",
+    "marital_status": "single",
+    "address": "123 Rue de la Paix, YAKRO, Côte d'Ivoire",
+  }
+
+###
+//Acceptation de l'invitation par le membre
+POST http://localhost:8000/api/auth/accept-invitation/
+content-type : application/json
+
+  {
+    "token": "8157f8a1ce8b4c0ea091b444bb8f398e32d6ddaade1e4c6cb90a4828046ca8ca",
+    "password": "emmanueld123@",
+    "password_confirmation": "emmanueld123@"
+  }
+
+
+###
+//Connexion du membre après acceptation de l'invitation
+POST http://127.0.0.1:8000/api/auth/login/
+content-type : application/json
+
+  {
+    "username": "emmanuel.bourgois",
+    "password": "emmanueld123@"
+  }
+
+###
+// Création d'une personne
+POST http://127.0.0.1:8000/api/people/
+content-type : application/json
+
+  {
+    "first_name": "Marie",
+    "last_name": "Kouassi",
+    "email": "marie@example.com",
+    "phone": "+22501020304"
+  }
+
+###
+//Conversion d'une personne en membre
+POST http://127.0.0.1:8000/api/persons/<uuid>/create-membership/
+content-type : application/json
+
+  {
+    "church": "eb9ec83f-8e4a-4d8a-af4f-1cd7fe5e4a3e",
+    "campus": "e7ccf0c2-1be8-4bc5-a301-d0f4e8e0f4a2",
+    "marital_status": "single",
+    "address": "456 Rue de la Paix, YAKRO, Côte d'Ivoire"
+  }
+
+
+###
+//Création d'une famille
+POST http://127.0.0.1:8000/api/families/
+content-type : application/json
+
+{
+  "name": "Famille Kouassi",
+  "address": "Abidjan",
+  "phone": "+22500000000",
+  "email": "famille@example.com",
+  "notes": "Famille de test"
+}
+
+###
+//Ajout d'un membre à une famille
+POST http://127.0.0.1:8000/api/families/<uuid>/add-member/
+content-type : application/json
+
+{
+  "person": "PERSON_UUID",
+  "relationship_type": "PARENT",
+  "is_primary_contact": true
+}

@@ -1,0 +1,41 @@
+from django.urls import path
+
+from apps.ecodim.views import (
+    EcodimChildDetailView,
+    EcodimChildEnrollmentView,
+    EcodimChildGuardiansView,
+    EcodimChildHandoffsView,
+    EcodimChildListCreateView,
+    EcodimClassDetailView,
+    EcodimClassListCreateView,
+    EcodimContextView,
+    EcodimDashboardView,
+    EcodimFamilyListView,
+    EcodimMemberListView,
+    EcodimPickupAuthorizationDetailView,
+    EcodimPickupAuthorizationsView,
+    EcodimSessionDetailView,
+    EcodimSessionListCreateView,
+    EcodimStaffDetailView,
+    EcodimStaffListCreateView,
+)
+
+urlpatterns = [
+    path('context/', EcodimContextView.as_view(), name='ecodim-context'),
+    path('dashboard/', EcodimDashboardView.as_view(), name='ecodim-dashboard'),
+    path('children/', EcodimChildListCreateView.as_view(), name='ecodim-children'),
+    path('children/<uuid:child_id>/', EcodimChildDetailView.as_view(), name='ecodim-child-detail'),
+    path('children/<uuid:child_id>/enrollment/', EcodimChildEnrollmentView.as_view(), name='ecodim-child-enrollment'),
+    path('children/<uuid:child_id>/guardians/', EcodimChildGuardiansView.as_view(), name='ecodim-child-guardians'),
+    path('children/<uuid:child_id>/pickup-authorizations/', EcodimPickupAuthorizationsView.as_view(), name='ecodim-pickup-authorizations'),
+    path('children/<uuid:child_id>/pickup-authorizations/<uuid:authorization_id>/', EcodimPickupAuthorizationDetailView.as_view(), name='ecodim-pickup-authorization-detail'),
+    path('children/<uuid:child_id>/handoffs/', EcodimChildHandoffsView.as_view(), name='ecodim-child-handoffs'),
+    path('classes/', EcodimClassListCreateView.as_view(), name='ecodim-classes'),
+    path('classes/<uuid:class_id>/', EcodimClassDetailView.as_view(), name='ecodim-class-detail'),
+    path('members/', EcodimMemberListView.as_view(), name='ecodim-linkable-members'),
+    path('families/', EcodimFamilyListView.as_view(), name='ecodim-linkable-families'),
+    path('sessions/', EcodimSessionListCreateView.as_view(), name='ecodim-sessions'),
+    path('sessions/<uuid:session_id>/', EcodimSessionDetailView.as_view(), name='ecodim-session-detail'),
+    path('staff/', EcodimStaffListCreateView.as_view(), name='ecodim-staff'),
+    path('staff/<uuid:assignment_id>/', EcodimStaffDetailView.as_view(), name='ecodim-staff-detail'),
+]
