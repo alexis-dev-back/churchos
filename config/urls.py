@@ -31,6 +31,8 @@ urlpatterns = [
     path('api/attendance/', include('apps.attendance.urls')),
     path('api/ecodim/', include('apps.ecodim.urls')),
     path('api/finance/', include('apps.finance.urls')),
+    path('api/pastoral/', include('apps.pastoral.urls')),
+    path('api/platform/', include('apps.platform.urls')),
 ]
 
 if settings.DEBUG:

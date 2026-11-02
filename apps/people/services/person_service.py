@@ -15,7 +15,7 @@ User = get_user_model()
 
 class PersonService:
     @staticmethod
-    def find_duplicates(data):
+    def find_duplicates(data, organization):
         email = (data.get('email') or '').strip().lower()
         phone = (data.get('phone') or '').strip()
         first_name = (data.get('first_name') or '').strip()
@@ -29,11 +29,12 @@ class PersonService:
         if first_name and last_name:
             query |= (Q(first_name__iexact=first_name) & Q(last_name__iexact=last_name))
 
-        return Person.objects.filter(query).order_by('last_name', 'first_name')[:10]
+        return Person.objects.filter(organization=organization).filter(query).order_by('last_name', 'first_name')[:10]
 
     @staticmethod
-    def create_person(data, user=None):
+    def create_person(data, organization, user=None):
         person = Person.objects.create(
+            organization=organization,
             user=user,
             first_name=(data.get('first_name') or '').strip(),
             last_name=(data.get('last_name') or '').strip(),
@@ -55,6 +56,9 @@ class PersonService:
         current_org = TenantContext.get()
         if current_org is None:
             raise ValidationError('Aucune organisation active n’a été sélectionnée.')
+
+        if person.organization_id != current_org.tenant_id:
+            raise ValidationError('Cette personne ne fait pas partie de l’organisation active.')
 
         if person.user is not None:
             raise ValidationError('Cette personne a déjà un compte utilisateur associé.')

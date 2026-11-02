@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -19,7 +20,10 @@ class FamilyMemberView(APIView):
         family = Family.objects.filter(pk=pk, organization=TenantContext.get()).first()
         if family is None:
             return Response({'detail': 'Famille introuvable.'}, status=status.HTTP_404_NOT_FOUND)
-        memberships = FamilyMember.objects.filter(family=family).select_related('person', 'member')
+        memberships = FamilyMember.objects.filter(family=family).filter(
+            Q(member__organization=family.organization)
+            | Q(person__organization=family.organization),
+        ).select_related('person', 'member')
         return Response(FamilyMemberSerializer(memberships, many=True).data)
 
     def post(self, request, pk):

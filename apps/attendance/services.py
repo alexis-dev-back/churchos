@@ -373,6 +373,7 @@ def create_visitor(session, actor, data):
             raise ValidationError({'visitor_id': 'Fiche visiteur réutilisable introuvable.'})
     else:
         person = Person.objects.create(
+            organization=organization,
             first_name=data['first_name'].strip(),
             last_name=data['last_name'].strip(),
             email=data.get('email') or None,

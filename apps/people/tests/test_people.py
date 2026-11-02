@@ -27,7 +27,50 @@ class PersonApiTests(APITestCase):
         }, format='json')
 
         self.assertEqual(response.status_code, 201)
-        self.assertTrue(Person.objects.filter(email='marie@example.com').exists())
+        self.assertTrue(Person.objects.filter(email='marie@example.com', organization=self.organization).exists())
+
+    def test_people_and_person_details_are_scoped_to_the_active_organization(self):
+        other_organization = Organization.objects.create(name='Other Org', slug='other-org')
+        foreign_person = Person.objects.create(
+            organization=other_organization,
+            first_name='Jean',
+            last_name='Other',
+            email='jean.other@example.com',
+        )
+        own_person = Person.objects.create(
+            organization=self.organization,
+            first_name='Marie',
+            last_name='Local',
+            email='marie.local@example.com',
+        )
+
+        listing = self.client.get('/api/people/')
+        own_detail = self.client.get(f'/api/people/{own_person.id}/')
+        foreign_detail = self.client.get(f'/api/people/{foreign_person.id}/')
+
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual([item['id'] for item in listing.data], [str(own_person.id)])
+        self.assertEqual(own_detail.status_code, 200)
+        self.assertEqual(foreign_detail.status_code, 404)
+
+    def test_person_creation_does_not_report_duplicates_from_another_organization(self):
+        other_organization = Organization.objects.create(name='Other Org', slug='other-org')
+        Person.objects.create(
+            organization=other_organization,
+            first_name='Marie',
+            last_name='Kouassi',
+            email='marie@example.com',
+        )
+
+        response = self.client.post('/api/people/', {
+            'first_name': 'Marie',
+            'last_name': 'Kouassi',
+            'email': 'marie@example.com',
+        }, format='json')
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(Person.objects.filter(email='marie@example.com').count(), 2)
+        self.assertEqual(Person.objects.get(pk=response.data['id']).organization, self.organization)
 
     def test_convert_person_to_member_creates_user_and_invitation(self):
         church = Church.objects.create(
@@ -42,6 +85,7 @@ class PersonApiTests(APITestCase):
             slug='campus-a',
         )
         person = Person.objects.create(
+            organization=self.organization,
             first_name='Paul',
             last_name='Kouassi',
             email='paul@example.com',

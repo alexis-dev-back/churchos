@@ -1,4 +1,4 @@
-from django.db.models import CharField, Count, OuterRef, Q, Subquery, Value
+from django.db.models import CharField, Count, F, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Coalesce, Concat
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -17,11 +17,17 @@ def family_summary_queryset(queryset):
         Q(is_primary_contact=True) | Q(relationship_type=FamilyMember.RelationshipType.HEAD),
         family_id=OuterRef('pk'),
         left_at__isnull=True,
+    ).filter(
+        Q(member__organization=OuterRef('organization'))
+        | Q(person__organization=OuterRef('organization')),
     ).order_by('-is_primary_contact', '-joined_at')
     return queryset.annotate(
         member_count=Count(
             'memberships',
-            filter=Q(memberships__left_at__isnull=True),
+            filter=Q(memberships__left_at__isnull=True) & (
+                Q(memberships__member__organization=F('organization'))
+                | Q(memberships__person__organization=F('organization'))
+            ),
             distinct=True,
         ),
         primary_contact_name=Subquery(

@@ -6,6 +6,13 @@ from django.db import models
 
 class Person(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        'core.Organization',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='people',
+    )
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
