@@ -50,6 +50,8 @@ INSTALLED_APPS = [
     'apps.attendance.apps.AttendanceConfig',
     'apps.ecodim.apps.EcodimConfig',
     'apps.finance.apps.FinanceConfig',
+    'apps.pastoral.apps.PastoralConfig',
+    'apps.platform.apps.PlatformConfig',
 ]
 
 MIDDLEWARE = [

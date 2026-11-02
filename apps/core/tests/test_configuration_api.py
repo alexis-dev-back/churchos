@@ -63,6 +63,60 @@ class ConfigurationApiTests(APITestCase):
         refresh['tenant_id'] = str(self.organization.tenant_id)
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
 
+    def test_admin_can_reset_password_for_user_in_organization(self):
+        password = 'Different-Strong-Password-984!'
+        response = self.client.post(
+            f'/api/configuration/users/{self.membership.pk}/reset-password/',
+            {'password': password},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertNotIn('password', response.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(password))
+        audit = ConfigurationAuditLog.objects.get(
+            organization=self.organization,
+            action='USER_PASSWORD_RESET',
+        )
+        self.assertEqual(audit.object_id, str(self.membership.pk))
+        self.assertEqual(audit.metadata, {'user_id': self.user.pk})
+
+    def test_password_reset_is_admin_only_and_tenant_scoped(self):
+        other_user = User.objects.create_user(username='other-config-user', password='Strong-password-123')
+        other_membership = OrganizationMembership.objects.create(
+            user=other_user,
+            organization=self.other_organization,
+        )
+        self.authenticate(self.user)
+        forbidden = self.client.post(
+            f'/api/configuration/users/{self.membership.pk}/reset-password/',
+            {'password': 'Different-Strong-Password-984!'},
+            format='json',
+        )
+        self.authenticate(self.admin)
+        out_of_scope = self.client.post(
+            f'/api/configuration/users/{other_membership.pk}/reset-password/',
+            {'password': 'Different-Strong-Password-984!'},
+            format='json',
+        )
+
+        self.assertEqual(forbidden.status_code, 403)
+        self.assertEqual(out_of_scope.status_code, 404)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Strong-password-123'))
+
+    def test_password_reset_rejects_weak_password(self):
+        response = self.client.post(
+            f'/api/configuration/users/{self.membership.pk}/reset-password/',
+            {'password': 'password'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password('Strong-password-123'))
+
     def create_role(self, name='Trésorier', code='tresorier'):
         response = self.client.post(
             '/api/configuration/roles/',

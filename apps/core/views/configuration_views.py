@@ -1,4 +1,6 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
@@ -22,6 +24,7 @@ from apps.core.models import (
 from apps.core.configuration_serializers import (
     AppPermissionSerializer,
     ChurchSettingsSerializer,
+    ConfigurationPasswordResetSerializer,
     OrganizationRolePermissionsSerializer,
     OrganizationRoleSerializer,
     OrganizationRoleWriteSerializer,
@@ -89,10 +92,10 @@ class ConfigurationAccessView(APIView):
             is_active=True,
         ).first()
         if membership is None:
-            return Response({'permission_codes': []})
+            return Response({'permission_codes': [], 'is_organization_admin': False})
         if membership.role in {OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN}:
             codes = AppPermission.objects.filter(is_active=True).values_list('code', flat=True)
-            return Response({'permission_codes': list(codes)})
+            return Response({'permission_codes': list(codes), 'is_organization_admin': True})
         now = timezone.now()
         codes = AppPermission.objects.filter(
             is_active=True,
@@ -105,7 +108,7 @@ class ConfigurationAccessView(APIView):
             Q(role_links__role__assignments__expires_at__isnull=True)
             | Q(role_links__role__assignments__expires_at__gt=now)
         ).values_list('code', flat=True).distinct()
-        return Response({'permission_codes': list(codes)})
+        return Response({'permission_codes': list(codes), 'is_organization_admin': False})
 
 
 class OrganizationRoleListCreateView(APIView):
@@ -514,6 +517,47 @@ class ConfigurationUserDetailView(APIView):
             'is_active': membership.is_active,
             'account_is_active': membership.user.is_active,
         })
+
+
+class ConfigurationUserPasswordResetView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @transaction.atomic
+    def post(self, request, membership_id):
+        organization = _organization()
+        requester_membership = OrganizationMembership.objects.filter(
+            user=request.user,
+            organization=organization,
+            is_active=True,
+            role__in=[OrganizationMembership.Role.OWNER, OrganizationMembership.Role.ADMIN],
+        ).exists()
+        if not requester_membership:
+            raise PermissionDenied('Seuls les administrateurs de l’organisation peuvent réinitialiser un mot de passe.')
+
+        membership = get_object_or_404(
+            OrganizationMembership.objects.select_for_update().select_related('user'),
+            organization=organization,
+            pk=membership_id,
+        )
+        serializer = ConfigurationPasswordResetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        password = serializer.validated_data['password']
+        try:
+            validate_password(password, membership.user)
+        except DjangoValidationError as error:
+            raise ValidationError({'password': error.messages}) from error
+
+        membership.user.set_password(password)
+        membership.user.save(update_fields=['password'])
+        record_configuration_audit(
+            organization,
+            request.user,
+            'USER_PASSWORD_RESET',
+            'OrganizationMembership',
+            membership.pk,
+            metadata={'user_id': membership.user_id},
+        )
+        return Response({'detail': 'Le mot de passe a été réinitialisé.'})
 
 
 class ConfigurationAuditLogView(APIView):

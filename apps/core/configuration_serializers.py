@@ -95,6 +95,15 @@ class OrganizationRolePermissionsSerializer(serializers.Serializer):
         return list(permissions)
 
 
+class ConfigurationPasswordResetSerializer(serializers.Serializer):
+    password = serializers.CharField(
+        write_only=True,
+        trim_whitespace=False,
+        min_length=8,
+        max_length=128,
+    )
+
+
 class UserRoleAssignmentWriteSerializer(serializers.Serializer):
     membership_id = serializers.IntegerField()
     role_id = serializers.UUIDField()
