@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     InvoiceDetailView,
     InvoiceListCreateView,
+    PlatformSettingsView,
     PlatformStatsView,
     SubscriptionDetailView,
     SubscriptionListCreateView,
@@ -22,4 +23,5 @@ urlpatterns = [
     path('tickets/', SupportTicketListCreateView.as_view(), name='platform-tickets'),
     path('tickets/<uuid:pk>/', SupportTicketDetailView.as_view(), name='platform-ticket-detail'),
     path('stats/', PlatformStatsView.as_view(), name='platform-stats'),
+    path('settings/', PlatformSettingsView.as_view(), name='platform-settings'),
 ]

@@ -1,15 +1,16 @@
 from django.shortcuts import get_object_or_404
 from django.db import transaction
 from rest_framework import status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.core.models import OrganizationMembership
 from apps.core.services.configuration_access import has_configuration_permission
-from apps.members.models import Member, MemberInvitation
+from apps.members.models import Member, MemberHistory, MemberInvitation
 from apps.members.permissions import IsMemberOwnerOrAdmin, IsTenantAdmin
-from apps.members.serializers import MemberDetailSerializer, MemberWriteSerializer
+from apps.members.serializers import MemberDetailSerializer, MemberHistorySerializer, MemberWriteSerializer
 from apps.members.services.member_service import MemberService
 from apps.ministries.services import close_member_church_roles
 from infrastructure.tenancy import TenantContext
@@ -77,10 +78,87 @@ class MemberDetailView(APIView):
         member = self.get_object(request, pk)
         if member is None:
             return Response({'detail': 'Membre introuvable.'}, status=status.HTTP_404_NOT_FOUND)
-        serializer = MemberWriteSerializer(member, data=request.data, partial=True)
+        can_update_status = has_configuration_permission(
+            request.user,
+            'members.update',
+            member.organization,
+            church=member.church,
+            campus=member.campus,
+        )
+        if 'status' in request.data and not can_update_status:
+            raise PermissionDenied('Seul un responsable autorisé peut modifier le statut du membre.')
+        serializer = MemberWriteSerializer(
+            member,
+            data=request.data,
+            partial=True,
+            context={'allow_status': can_update_status},
+        )
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(MemberDetailSerializer(member).data)
+
+
+class MemberHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def _member(self, request, pk, write=False):
+        member = Member.objects.filter(
+            pk=pk,
+            organization=TenantContext.get(),
+        ).select_related('organization', 'church', 'campus', 'user').first()
+        if member is None:
+            return None
+
+        if not write and request.user == member.user:
+            return member
+
+        permission_code = 'members.update' if write else 'members.read'
+        if has_configuration_permission(
+            request.user,
+            permission_code,
+            member.organization,
+            church=member.church,
+            campus=member.campus,
+        ):
+            return member
+        return None
+
+    def get(self, request, pk):
+        member = self._member(request, pk)
+        if member is None:
+            return Response({'detail': 'Membre introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        entries = member.history.select_related('created_by').all()
+        return Response(MemberHistorySerializer(entries, many=True).data)
+
+    def post(self, request, pk):
+        member = self._member(request, pk, write=True)
+        if member is None:
+            return Response({'detail': 'Membre introuvable ou permission de modification requise.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MemberHistorySerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        entry = serializer.save(member=member, created_by=request.user)
+        return Response(MemberHistorySerializer(entry).data, status=status.HTTP_201_CREATED)
+
+    def patch(self, request, pk, entry_id):
+        member = self._member(request, pk, write=True)
+        if member is None:
+            return Response({'detail': 'Membre introuvable ou permission de modification requise.'}, status=status.HTTP_404_NOT_FOUND)
+        entry = member.history.filter(pk=entry_id).first()
+        if entry is None:
+            return Response({'detail': 'Événement introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        serializer = MemberHistorySerializer(entry, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        return Response(MemberHistorySerializer(serializer.save()).data)
+
+    def delete(self, request, pk, entry_id):
+        member = self._member(request, pk, write=True)
+        if member is None:
+            return Response({'detail': 'Membre introuvable ou permission de modification requise.'}, status=status.HTTP_404_NOT_FOUND)
+        entry = member.history.filter(pk=entry_id).first()
+        if entry is None:
+            return Response({'detail': 'Événement introuvable.'}, status=status.HTTP_404_NOT_FOUND)
+        entry.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MemberSuspendView(APIView):

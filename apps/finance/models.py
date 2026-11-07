@@ -124,6 +124,15 @@ class FinanceTransaction(models.Model):
         REJECTED = 'REJECTED', 'Rejetée'
         CANCELLED = 'CANCELLED', 'Annulée'
 
+    class PaymentMethod(models.TextChoices):
+        CASH = 'CASH', 'Espèces'
+        BANK_TRANSFER = 'BANK_TRANSFER', 'Virement'
+        MOBILE_MONEY = 'MOBILE_MONEY', 'Mobile Money'
+        CHEQUE = 'CHEQUE', 'Chèque'
+        ONLINE = 'ONLINE', 'Paiement en ligne'
+        CARD = 'CARD', 'Carte'
+        OTHER = 'OTHER', 'Autre'
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     organization = models.ForeignKey('core.Organization', on_delete=models.PROTECT, related_name='finance_transactions')
     church = models.ForeignKey('core.Church', on_delete=models.PROTECT, related_name='finance_transactions')
@@ -139,6 +148,11 @@ class FinanceTransaction(models.Model):
     description = models.CharField(max_length=500, blank=True)
     amount = models.DecimalField(max_digits=14, decimal_places=2)
     currency = models.CharField(max_length=3)
+    payment_method = models.CharField(
+        max_length=20,
+        choices=PaymentMethod.choices,
+        default=PaymentMethod.CASH,
+    )
     exchange_rate_to_base = models.DecimalField(max_digits=14, decimal_places=6, default=Decimal('1'))
     transaction_date = models.DateField()
     reference = models.CharField(max_length=80, blank=True)

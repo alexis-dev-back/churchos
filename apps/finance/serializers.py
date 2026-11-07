@@ -88,6 +88,8 @@ class FinancialConfigurationSerializer(serializers.ModelSerializer):
 class FinancialConfigurationChangeSerializer(serializers.Serializer):
     level = serializers.ChoiceField(choices=FinancialConfiguration.Level.choices, required=False)
     base_currency = serializers.CharField(min_length=3, max_length=3, required=False)
+    is_suspended = serializers.BooleanField(required=False)
+    suspension_reason = serializers.CharField(max_length=500, required=False, allow_blank=True)
     reason = serializers.CharField(max_length=500)
 
     def validate_base_currency(self, value):
@@ -95,6 +97,19 @@ class FinancialConfigurationChangeSerializer(serializers.Serializer):
         if not value.isascii() or not value.isalpha():
             raise serializers.ValidationError('La devise doit être un code alphabétique de trois lettres.')
         return value
+
+    def validate(self, attrs):
+        if attrs.get('is_suspended') and not attrs.get('suspension_reason', '').strip():
+            raise serializers.ValidationError({
+                'suspension_reason': 'Un motif est obligatoire pour suspendre les opérations financières.',
+            })
+        if attrs.get('is_suspended') is False:
+            attrs['suspension_reason'] = ''
+        elif 'suspension_reason' in attrs and 'is_suspended' not in attrs:
+            raise serializers.ValidationError({
+                'is_suspended': 'Le statut de suspension doit être indiqué avec son motif.',
+            })
+        return attrs
 
 
 class FinancialConfigurationCreateSerializer(serializers.Serializer):
@@ -193,6 +208,11 @@ class FinanceTransactionCreateSerializer(serializers.Serializer):
     description = serializers.CharField(max_length=500, required=False, allow_blank=True)
     amount = serializers.DecimalField(max_digits=14, decimal_places=2, min_value=Decimal('0.01'))
     currency = serializers.CharField(min_length=3, max_length=3, default='XOF')
+    payment_method = serializers.ChoiceField(
+        choices=FinanceTransaction.PaymentMethod.choices,
+        required=False,
+        default=FinanceTransaction.PaymentMethod.CASH,
+    )
     exchange_rate_to_base = serializers.DecimalField(max_digits=14, decimal_places=6, min_value=Decimal('0.000001'), default=1)
     transaction_date = serializers.DateField()
     reference = serializers.CharField(max_length=80, required=False, allow_blank=True)
@@ -219,7 +239,7 @@ class FinanceTransactionSerializer(serializers.ModelSerializer):
             'fund_id', 'fund_name', 'campus_id', 'campus_name', 'member_id',
             'member_name', 'counterparty_name', 'is_anonymous', 'description',
             'amount', 'paid_amount', 'remaining_amount', 'currency',
-            'exchange_rate_to_base', 'transaction_date', 'reference',
+            'payment_method', 'exchange_rate_to_base', 'transaction_date', 'reference',
             'created_by', 'approved_by', 'approved_at', 'decision_reason',
             'created_at', 'updated_at',
         ]

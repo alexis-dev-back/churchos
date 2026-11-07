@@ -46,6 +46,13 @@ class PersonService:
             address=data.get('address'),
             photo=data.get('photo'),
             notes=data.get('notes'),
+            nationality=data.get('nationality', ''),
+            profession=data.get('profession', ''),
+            education_level=data.get('education_level', ''),
+            marital_status=data.get('marital_status', ''),
+            baptism_status=data.get('baptism_status', Person.BaptismStatus.UNKNOWN),
+            person_type=data.get('person_type', Person.PersonType.NON_INVITED),
+            invited_by_member=data.get('invited_by_member'),
         )
         return person
 
@@ -121,7 +128,11 @@ class PersonService:
                 gender=data.get('gender', person.gender or ''),
                 date_of_birth=person.date_of_birth or data.get('date_of_birth'),
                 address=data.get('address') or person.address or '',
-                marital_status=data.get('marital_status', ''),
+                marital_status=data.get('marital_status', person.marital_status or ''),
+                nationality=person.nationality,
+                profession=person.profession,
+                education_level=person.education_level,
+                baptism_status=person.baptism_status,
                 status=Member.Status.PENDING,
             )
             OrganizationMembership.objects.get_or_create(

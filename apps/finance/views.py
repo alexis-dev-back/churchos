@@ -32,6 +32,7 @@ from apps.finance.models import (
 from apps.finance.permissions import (
     FINANCE_READ_ROLES,
     finance_accesses,
+    has_full_finance_control,
     has_finance_role,
     is_finance_organization_admin,
 )
@@ -429,6 +430,7 @@ class FinanceTransactionListCreateView(APIView):
             description=values.get('description', ''),
             amount=values['amount'],
             currency=values['currency'],
+            payment_method=values.get('payment_method', FinanceTransaction.PaymentMethod.CASH),
             exchange_rate_to_base=values['exchange_rate_to_base'],
             transaction_date=values['transaction_date'],
             reference=reference,
@@ -445,6 +447,7 @@ class FinanceTransactionListCreateView(APIView):
                 'kind': item.kind,
                 'amount': str(item.amount),
                 'currency': item.currency,
+                'payment_method': item.payment_method,
                 'exchange_rate_to_base': str(item.exchange_rate_to_base),
                 'status': item.status,
             },
@@ -487,7 +490,11 @@ class FinanceTransactionDecisionView(APIView):
             )
         ):
             raise PermissionDenied('Seul un approbateur financier peut décider de cette dépense.')
-        if request.user.pk == item.created_by_id:
+        if request.user.pk == item.created_by_id and not has_full_finance_control(
+            request.user,
+            item.church,
+            organization,
+        ):
             raise PermissionDenied('Le demandeur ne peut pas approuver sa propre dépense.')
         serializer = FinancePaymentConfirmSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -533,7 +540,10 @@ class FinanceTransactionDecisionView(APIView):
             )
         ):
             raise PermissionDenied('Seul un trésorier habilité peut confirmer l’encaissement.')
-        if request.user.pk == item.created_by_id:
+        if (
+            request.user.pk == item.created_by_id
+            and not has_full_finance_control(request.user, item.church, organization)
+        ):
             raise PermissionDenied('La personne ayant déclaré la collecte ne peut pas confirmer son propre encaissement.')
         values = FinancePaymentCreateSerializer(data=request.data)
         values.is_valid(raise_exception=True)
@@ -791,7 +801,10 @@ class FinancePaymentDetailView(APIView):
                 {'reason': values['reason']},
             )
             return Response({'id': str(payment.pk), 'status': payment.status})
-        if request.user.pk in {item.created_by_id, item.approved_by_id}:
+        if (
+            request.user.pk in {item.created_by_id, item.approved_by_id}
+            and not has_full_finance_control(request.user, item.church, organization)
+        ):
             raise PermissionDenied('Le demandeur et l’approbateur ne peuvent pas confirmer l’exécution du paiement.')
         account = FinanceAccount.objects.select_for_update().get(pk=payment.account_id)
         payment.status = FinancePayment.Status.CONFIRMED
@@ -1791,6 +1804,11 @@ class FinancialConfigurationView(APIView):
             for field in ('level', 'base_currency')
             if field in values and values[field] != getattr(configuration, field)
         }
+        changes.update({
+            field: values[field]
+            for field in ('is_suspended', 'suspension_reason')
+            if field in values and values[field] != getattr(configuration, field)
+        })
         if not changes:
             raise ValidationError({'detail': 'Aucune modification de configuration à enregistrer.'})
         for field, value in changes.items():

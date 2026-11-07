@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     'apps.ecodim.apps.EcodimConfig',
     'apps.finance.apps.FinanceConfig',
     'apps.pastoral.apps.PastoralConfig',
+    'apps.tasks.apps.TasksConfig',
     'apps.platform.apps.PlatformConfig',
 ]
 

@@ -1,4 +1,8 @@
+from io import BytesIO
+
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
+from PIL import Image
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
@@ -181,6 +185,128 @@ class MemberFlowTests(APITestCase):
         response = self.client.get('/api/members/me/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['email'], 'luc@example.com')
+
+    def test_member_profile_can_be_completed_with_new_details_and_status(self):
+        self._auth()
+        created = self.client.post('/api/members/', {
+            'first_name': 'Awa',
+            'last_name': 'Diallo',
+            'email': 'awa@example.com',
+            'church': str(self.church.church_id),
+        }, format='json')
+        member = Member.objects.get(pk=created.data['id'])
+
+        updated = self.client.patch(f'/api/members/{member.id}/', {
+            'nationality': 'Ivoirienne',
+            'profession': 'Enseignante',
+            'education_level': 'Université',
+            'baptism_status': 'IN_PREPARATION',
+            'status': 'NEW',
+        }, format='json')
+
+        self.assertEqual(updated.status_code, 200, updated.data)
+        self.assertEqual(updated.data['nationality'], 'Ivoirienne')
+        self.assertEqual(updated.data['profession'], 'Enseignante')
+        self.assertEqual(updated.data['baptism_status'], 'IN_PREPARATION')
+        self.assertEqual(updated.data['status'], 'NEW')
+
+    def test_member_profile_accepts_uploaded_photo(self):
+        self._auth()
+        created = self.client.post('/api/members/', {
+            'first_name': 'Photo',
+            'last_name': 'Test',
+            'email': 'photo@example.com',
+            'church': str(self.church.church_id),
+        }, format='json')
+        member = Member.objects.get(pk=created.data['id'])
+        image = SimpleUploadedFile(
+            'profile.png',
+            self._png_bytes(),
+            content_type='image/png',
+        )
+
+        response = self.client.patch(
+            f'/api/members/{member.id}/',
+            {'photo_upload': image},
+            format='multipart',
+        )
+
+        self.assertEqual(response.status_code, 200, response.data)
+        member.refresh_from_db()
+        self.assertTrue(member.photo_image.name.startswith('member-photos/'))
+        self.assertIn('/media/member-photos/', response.data['photo'])
+        member.photo_image.delete(save=False)
+
+    @staticmethod
+    def _png_bytes():
+        image = Image.new('RGB', (2, 1), color='green')
+        output = BytesIO()
+        image.save(output, format='PNG')
+        return output.getvalue()
+
+    def test_member_history_is_available_to_member_and_manageable_by_admin(self):
+        member_user = User.objects.create_user(
+            username='history-member',
+            email='history-member@example.com',
+            password='Strong-password-123',
+            is_active=True,
+        )
+        member = Member.objects.create(
+            user=member_user,
+            organization=self.organization,
+            church=self.church,
+            first_name='History',
+            last_name='Member',
+            email=member_user.email,
+        )
+        OrganizationMembership.objects.create(
+            user=member_user,
+            organization=self.organization,
+            role=OrganizationMembership.Role.MEMBER,
+        )
+        self._auth()
+        created = self.client.post(
+            f'/api/members/{member.id}/history/',
+            {
+                'event_type': 'TRAINING',
+                'title': 'Formation de leadership',
+                'event_date': '2025-06-10',
+                'description': 'Formation suivie à l’église.',
+            },
+            format='json',
+        )
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data['event_type_label'], 'Formation')
+        listed = self.client.get(f'/api/members/{member.id}/history/')
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.data), 1)
+
+        member_token = RefreshToken.for_user(member_user)
+        member_token['tenant_id'] = str(self.organization.tenant_id)
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {member_token.access_token}')
+        member_history = self.client.get(f'/api/members/{member.id}/history/')
+        self.assertEqual(member_history.status_code, 200, member_history.data)
+        profile_update = self.client.patch(
+            f'/api/members/{member.id}/',
+            {'profession': 'Infirmier'},
+            format='json',
+        )
+        self.assertEqual(profile_update.status_code, 200, profile_update.data)
+        self.assertEqual(profile_update.data['profession'], 'Infirmier')
+        self.assertEqual(
+            self.client.post(
+                f'/api/members/{member.id}/history/',
+                {'event_type': 'FUNCTION', 'title': 'Responsable jeunesse'},
+                format='json',
+            ).status_code,
+            404,
+        )
+        status_update = self.client.patch(
+            f'/api/members/{member.id}/',
+            {'status': 'INACTIVE'},
+            format='json',
+        )
+        self.assertEqual(status_update.status_code, 403)
 
     def test_suspending_member_only_deactivates_membership_in_active_organization(self):
         user = User.objects.create_user(

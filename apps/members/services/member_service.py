@@ -96,6 +96,14 @@ class MemberService:
                 date_of_birth=data.get('date_of_birth'),
                 address=data.get('address', ''),
                 marital_status=data.get('marital_status', ''),
+                nationality=data.get('nationality', ''),
+                profession=data.get('profession', ''),
+                education_level=data.get('education_level', ''),
+                baptism_status=data.get('baptism_status', Member.BaptismStatus.UNKNOWN),
+                baptism_date=data.get('baptism_date'),
+                emergency_contact_name=data.get('emergency_contact_name', ''),
+                emergency_contact_phone=data.get('emergency_contact_phone', ''),
+                photo_image=data.get('photo_upload'),
                 status=Member.Status.PENDING,
             )
             OrganizationMembership.objects.get_or_create(

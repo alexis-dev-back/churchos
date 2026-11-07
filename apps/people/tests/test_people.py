@@ -19,15 +19,87 @@ class PersonApiTests(APITestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {refresh.access_token}')
 
     def test_create_person(self):
+        member_user = User.objects.create_user(username='inviter', email='inviter@example.com')
+        inviter = Member.objects.create(
+            user=member_user,
+            organization=self.organization,
+            church=Church.objects.create(
+                organization=self.organization,
+                name='Inviter Church',
+                slug='inviter-church',
+            ),
+            first_name='Mariam',
+            last_name='Invitante',
+            email='inviter@example.com',
+        )
         response = self.client.post('/api/persons/', {
             'first_name': 'Marie',
             'last_name': 'Kouassi',
             'email': 'marie@example.com',
             'phone': '+22501020304',
+            'person_type': 'INVITED',
+            'baptism_status': 'NOT_BAPTIZED',
+            'profession': 'Commerçante',
+            'nationality': 'Ivoirienne',
+            'invited_by_member': str(inviter.id),
         }, format='json')
 
         self.assertEqual(response.status_code, 201)
         self.assertTrue(Person.objects.filter(email='marie@example.com', organization=self.organization).exists())
+        self.assertEqual(response.data['person_type'], 'INVITED')
+        self.assertEqual(response.data['baptism_status'], 'NOT_BAPTIZED')
+        self.assertEqual(str(response.data['invited_by_member']), str(inviter.id))
+        self.assertEqual(response.data['invited_by_member_name'], 'Mariam Invitante')
+
+    def test_inviter_selection_is_scoped_to_active_organization(self):
+        other_organization = Organization.objects.create(name='Other Org', slug='other-org')
+        other_church = Church.objects.create(
+            organization=other_organization,
+            name='Other Church',
+            slug='other-church',
+        )
+        other_member_user = User.objects.create_user(username='foreign-inviter')
+        foreign_member = Member.objects.create(
+            user=other_member_user,
+            organization=other_organization,
+            church=other_church,
+            first_name='Autre',
+            last_name='Église',
+            email='foreign-inviter@example.com',
+        )
+
+        response = self.client.post('/api/people/', {
+            'first_name': 'Jean',
+            'last_name': 'Visiteur',
+            'invited_by_member': str(foreign_member.id),
+        }, format='json')
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('invited_by_member', response.data)
+
+    def test_people_inviter_options_are_scoped_to_active_organization(self):
+        church = Church.objects.create(
+            organization=self.organization,
+            name='Local Church',
+            slug='local-church',
+        )
+        inviter = Member.objects.create(
+            user=self.user,
+            organization=self.organization,
+            church=church,
+            first_name='Local',
+            last_name='Member',
+            email=self.user.email,
+        )
+
+        response = self.client.get('/api/people/inviter-members/')
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data, [{
+            'id': inviter.id,
+            'first_name': 'Local',
+            'last_name': 'Member',
+        }])
 
     def test_people_and_person_details_are_scoped_to_the_active_organization(self):
         other_organization = Organization.objects.create(name='Other Org', slug='other-org')

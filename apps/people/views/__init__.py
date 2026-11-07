@@ -1,3 +1,3 @@
-from .person import PersonCreateMembershipView, PersonDetailView, PersonListCreateView
+from .person import PersonCreateMembershipView, PersonDetailView, PersonInviterListView, PersonListCreateView
 
-__all__ = ['PersonListCreateView', 'PersonDetailView', 'PersonCreateMembershipView']
+__all__ = ['PersonListCreateView', 'PersonDetailView', 'PersonInviterListView', 'PersonCreateMembershipView']
