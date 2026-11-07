@@ -127,6 +127,57 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(FinancialConfigurationVersion.objects.filter(configuration__church=self.church).count(), 2)
         self.assertEqual(FinanceAuditLog.objects.filter(church=self.church).count(), 2)
 
+    def test_admin_can_suspend_and_resume_finance_with_audited_reason(self):
+        self.create_configuration()
+        endpoint = f'/api/finance/churches/{self.church.church_id}/configuration/'
+
+        suspended = self.client.patch(
+            endpoint,
+            {
+                'is_suspended': True,
+                'suspension_reason': 'Vérification des pièces justificatives',
+                'reason': 'Suspension temporaire pour contrôle',
+            },
+            format='json',
+        )
+
+        self.assertEqual(suspended.status_code, 200, suspended.data)
+        self.assertTrue(suspended.data['is_suspended'])
+        self.assertEqual(suspended.data['suspension_reason'], 'Vérification des pièces justificatives')
+        self.assertEqual(FinancialConfigurationVersion.objects.filter(configuration__church=self.church).count(), 2)
+
+        resumed = self.client.patch(
+            endpoint,
+            {
+                'is_suspended': False,
+                'reason': 'Contrôle terminé',
+            },
+            format='json',
+        )
+
+        self.assertEqual(resumed.status_code, 200, resumed.data)
+        self.assertFalse(resumed.data['is_suspended'])
+        self.assertEqual(resumed.data['suspension_reason'], '')
+        updates = FinanceAuditLog.objects.filter(
+            church=self.church,
+            action='FINANCE_CONFIGURATION_UPDATED',
+        ).order_by('created_at')
+        self.assertEqual(updates.count(), 2)
+        self.assertEqual(updates[0].detail['reason'], 'Suspension temporaire pour contrôle')
+        self.assertTrue(updates[0].detail['changes']['is_suspended'])
+
+    def test_suspending_finance_requires_a_reason(self):
+        self.create_configuration()
+
+        response = self.client.patch(
+            f'/api/finance/churches/{self.church.church_id}/configuration/',
+            {'is_suspended': True, 'reason': 'Suspension de contrôle'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('suspension_reason', response.data)
+
     def test_access_grant_is_scoped_to_active_member_of_selected_church(self):
         invalid = self.assign_role(member=self.outside_church_member)
         self.assertEqual(invalid.status_code, 400)
@@ -215,6 +266,174 @@ class FinanceApiTests(APITestCase):
         self.assertEqual(context.data['churches'][0]['church_id'], str(self.church.church_id))
         for church in context.data['churches']:
             self.assertCountEqual(church['permission_codes'], finance_codes)
+
+    def test_full_finance_role_can_approve_and_confirm_own_expense(self):
+        self.create_configuration()
+        period_response = self.client.post(
+            '/api/finance/periods/',
+            {
+                'church_id': str(self.church.church_id),
+                'name': 'Période gestion complète',
+                'starts_on': date.today().replace(day=1).isoformat(),
+                'ends_on': date.today().isoformat(),
+            },
+            format='json',
+        )
+        self.assertEqual(period_response.status_code, 201, period_response.data)
+        category = FinanceCategory.objects.get(church=self.church, code='fonctionnement')
+        account = FinanceAccount.objects.get(church=self.church)
+        account.opening_balance = 3000
+        account.save(update_fields=['opening_balance'])
+        role_response = self.client.post(
+            '/api/configuration/roles/',
+            {
+                'name': 'Gestion complète des finances',
+                'code': 'gestion-complete-finances',
+                'description': 'Tous les droits financiers',
+            },
+            format='json',
+        )
+        self.assertEqual(role_response.status_code, 201, role_response.data)
+        finance_codes = [
+            'finance.read',
+            'finance.income.create',
+            'finance.expense.create',
+            'finance.expense.approve',
+            'finance.payment.confirm',
+            'finance.budget.manage',
+            'finance.report.read',
+        ]
+        permission_response = self.client.post(
+            f"/api/configuration/roles/{role_response.data['id']}/permissions/",
+            {'permission_codes': finance_codes},
+            format='json',
+        )
+        self.assertEqual(permission_response.status_code, 200, permission_response.data)
+        assignment_response = self.client.post(
+            '/api/configuration/user-roles/',
+            {
+                'membership_id': self.financial_user.user.organization_memberships.get(
+                    organization=self.organization,
+                ).pk,
+                'role_id': role_response.data['id'],
+                'scope': 'CHURCH',
+                'church_id': str(self.church.church_id),
+            },
+            format='json',
+        )
+        self.assertEqual(assignment_response.status_code, 201, assignment_response.data)
+
+        self.authenticate(self.financial_user.user)
+        expense = self.client.post(
+            '/api/finance/transactions/',
+            {
+                'church_id': str(self.church.church_id),
+                'kind': FinanceTransaction.Kind.EXPENSE,
+                'period_id': period_response.data['id'],
+                'category_id': str(category.pk),
+                'amount': '2500.00',
+                'currency': 'XOF',
+                'transaction_date': date.today().isoformat(),
+                'description': 'Frais de fonctionnement',
+            },
+            format='json',
+        )
+        self.assertEqual(expense.status_code, 201, expense.data)
+
+        approved = self.client.post(
+            f"/api/finance/transactions/{expense.data['id']}/actions/approve/",
+            {'reason': 'Approbation par le responsable disposant de tous les droits'},
+            format='json',
+        )
+        self.assertEqual(approved.status_code, 200, approved.data)
+        self.assertEqual(approved.data['status'], FinanceTransaction.Status.APPROVED)
+
+        payment = self.client.post(
+            f"/api/finance/transactions/{expense.data['id']}/payments/",
+            {
+                'account_id': str(account.pk),
+                'amount': '2500.00',
+                'method': FinancePayment.Method.CASH,
+            },
+            format='json',
+        )
+        self.assertEqual(payment.status_code, 201, payment.data)
+
+        confirmed = self.client.post(
+            f"/api/finance/payments/{payment.data['id']}/actions/",
+            {'confirmed': True},
+            format='json',
+        )
+        self.assertEqual(confirmed.status_code, 200, confirmed.data)
+        self.assertEqual(confirmed.data['status'], FinancePayment.Status.CONFIRMED)
+        self.assertEqual(confirmed.data['transaction_status'], FinanceTransaction.Status.PAID)
+
+        income = self.client.post(
+            '/api/finance/transactions/',
+            {
+                'church_id': str(self.church.church_id),
+                'kind': FinanceTransaction.Kind.INCOME,
+                'period_id': period_response.data['id'],
+                'category_id': str(FinanceCategory.objects.get(church=self.church, code='offrande').pk),
+                'amount': '1000.00',
+                'currency': 'XOF',
+                'transaction_date': date.today().isoformat(),
+                'description': 'Offrande',
+            },
+            format='json',
+        )
+        self.assertEqual(income.status_code, 201, income.data)
+        income_confirmation = self.client.post(
+            f"/api/finance/transactions/{income.data['id']}/actions/confirm/",
+            {
+                'account_id': str(account.pk),
+                'amount': '1000.00',
+                'method': FinancePayment.Method.CASH,
+            },
+            format='json',
+        )
+
+        self.assertEqual(income_confirmation.status_code, 200, income_confirmation.data)
+        self.assertEqual(income_confirmation.data['status'], FinanceTransaction.Status.PAID)
+        self.assertEqual(FinanceAccountMovement.objects.count(), 2)
+
+    def test_approver_without_full_finance_rights_cannot_approve_own_expense(self):
+        self.create_configuration()
+        self.assign_role(role=FinanceRole.APPROVER)
+        period_response = self.client.post(
+            '/api/finance/periods/',
+            {
+                'church_id': str(self.church.church_id),
+                'name': 'Période séparation des tâches',
+                'starts_on': date.today().replace(day=1).isoformat(),
+                'ends_on': date.today().isoformat(),
+            },
+            format='json',
+        )
+        self.assertEqual(period_response.status_code, 201, period_response.data)
+        transaction_record = FinanceTransaction.objects.create(
+            organization=self.organization,
+            church=self.church,
+            period_id=period_response.data['id'],
+            kind=FinanceTransaction.Kind.EXPENSE,
+            status=FinanceTransaction.Status.PENDING_APPROVAL,
+            category=FinanceCategory.objects.get(church=self.church, code='fonctionnement'),
+            amount=100,
+            currency='XOF',
+            transaction_date=date.today(),
+            created_by=self.financial_user.user,
+        )
+
+        self.authenticate(self.financial_user.user)
+        response = self.client.post(
+            f'/api/finance/transactions/{transaction_record.pk}/actions/approve/',
+            {'reason': 'Tentative sans délégation complète'},
+            format='json',
+        )
+
+        self.assertEqual(response.status_code, 403)
+        transaction_record.refresh_from_db()
+        self.assertEqual(transaction_record.status, FinanceTransaction.Status.PENDING_APPROVAL)
 
     def test_non_admin_cannot_assign_finance_roles_or_change_configuration(self):
         self.create_configuration()

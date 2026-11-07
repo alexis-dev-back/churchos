@@ -69,6 +69,24 @@ class SuperAdminOrganizationUsersView(APIView):
 class SuperAdminUserCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsSuperuser]
 
+    def get(self, request):
+        users = User.objects.prefetch_related('organization_memberships__organization').order_by('username')
+        payload = []
+        for user in users:
+            membership = next(iter(user.organization_memberships.all()), None)
+            payload.append({
+                'id': user.pk,
+                'username': user.get_username(),
+                'email': user.email,
+                'is_superuser': user.is_superuser,
+                'is_active': user.is_active,
+                'last_login': user.last_login,
+                'organization': membership.organization.name if membership else None,
+                'organization_id': str(membership.organization.tenant_id) if membership else None,
+                'role': 'superadmin' if user.is_superuser else (membership.role if membership else None),
+            })
+        return Response(payload)
+
     @transaction.atomic
     def post(self, request):
         data = request.data.copy()
@@ -93,6 +111,15 @@ class SuperAdminUserCreateView(APIView):
             'organization_id': str(organization.tenant_id) if organization else None,
             'role': role if organization else None,
         }, status=status.HTTP_201_CREATED)
+
+
+class SuperAdminAllChurchesView(APIView):
+    permission_classes = [permissions.IsAuthenticated, IsSuperuser]
+
+    def get(self, request):
+        from apps.core.models import Church
+        churches = Church.objects.select_related('organization').all()
+        return Response(ChurchSerializer(churches, many=True).data)
 
 
 class SuperAdminChurchesView(APIView):

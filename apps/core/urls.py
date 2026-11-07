@@ -5,7 +5,7 @@ from .views.auth_views import AuthTokenRefreshView, LoginView, LogoutView, MeVie
 from .views.campus_views import *
 from .views.church_views import *
 from .views.organization_views import OrganizationMemberCreateView, OrganizationView, OrganisationCreateView, OrganisationDeleteView, OrganisationDetailView, OrganisationUpdateView
-from .views.superadmin_views import SuperAdminChurchDetailView, SuperAdminChurchesView, SuperAdminOrganizationDetailView, SuperAdminOrganizationsView, SuperAdminOrganizationUsersView, SuperAdminUserCreateView
+from .views.superadmin_views import SuperAdminAllChurchesView, SuperAdminChurchDetailView, SuperAdminChurchesView, SuperAdminOrganizationDetailView, SuperAdminOrganizationsView, SuperAdminOrganizationUsersView, SuperAdminUserCreateView
 
 urlpatterns = [
     path('auth/register/', RegistrationView.as_view(), name='auth-register'),
@@ -39,6 +39,7 @@ urlpatterns = [
     path('superadmin/organizations/<uuid:tenant_id>/', SuperAdminOrganizationDetailView.as_view(), name='superadmin-organization-detail'),
     path('superadmin/organizations/<uuid:tenant_id>/users/', SuperAdminOrganizationUsersView.as_view(), name='superadmin-organization-users'),
     path('superadmin/organizations/<uuid:tenant_id>/churches/', SuperAdminChurchesView.as_view(), name='superadmin-organization-churches'),
+    path('superadmin/churches/', SuperAdminAllChurchesView.as_view(), name='superadmin-churches'),
     path('superadmin/churches/<uuid:church_id>/', SuperAdminChurchDetailView.as_view(), name='superadmin-church-detail'),
     path('superadmin/users/', SuperAdminUserCreateView.as_view(), name='superadmin-user-create'),
     path('members/', include('apps.members.urls')),

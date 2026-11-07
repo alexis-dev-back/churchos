@@ -15,10 +15,12 @@ class OrganizationSerializer(serializers.ModelSerializer):
         read_only_fields = ['tenant_id', 'owner', 'date_created', 'update_date']
 
 class ChurchSerializer(serializers.ModelSerializer):
+    organization_name = serializers.CharField(source='organization.name', read_only=True)
+
     class Meta:
         model = models.Church
-        fields = ['church_id', 'organization', 'name', 'pastor_name', 'slug', 'phone', 'address', 'email', 'country', 'device', 'is_active', 'fuseau_horaire', 'date_created', 'update_date']
-        read_only_fields = ['church_id', 'date_created', 'update_date']
+        fields = ['church_id', 'organization', 'organization_name', 'name', 'pastor_name', 'slug', 'phone', 'address', 'email', 'country', 'device', 'is_active', 'fuseau_horaire', 'date_created', 'update_date']
+        read_only_fields = ['church_id', 'organization_name', 'date_created', 'update_date']
 
     def validate_organization(self, organization):
         if self.context.get('request') and self.context['request'].user.is_superuser:

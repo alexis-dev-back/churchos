@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.people.models import Person
+from apps.members.models import Member
 from apps.people.serializers import PersonSerializer
 from apps.people.services.person_service import PersonService
 from apps.members.permissions import IsTenantAdmin
@@ -18,7 +19,7 @@ class PersonListCreateView(APIView):
     def get(self, request):
         organization = TenantContext.get()
         q = request.query_params.get('q', '').strip()
-        qs = Person.objects.filter(organization=organization)
+        qs = Person.objects.filter(organization=organization).select_related('invited_by_member')
         if q:
             qs = qs.filter(
                 Q(first_name__icontains=q) |
@@ -54,7 +55,7 @@ class PersonDetailView(APIView):
     permission_classes = [IsAuthenticated, IsTenantAdmin]
 
     def get_object(self, pk):
-        return Person.objects.filter(pk=pk, organization=TenantContext.get()).first()
+        return Person.objects.filter(pk=pk, organization=TenantContext.get()).select_related('invited_by_member').first()
 
     def get(self, request, pk):
         person = self.get_object(pk)
@@ -70,6 +71,16 @@ class PersonDetailView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(PersonSerializer(person).data)
+
+
+class PersonInviterListView(APIView):
+    permission_classes = [IsAuthenticated, IsTenantAdmin]
+
+    def get(self, request):
+        members = Member.objects.filter(
+            organization=TenantContext.get(),
+        ).order_by('last_name', 'first_name').values('id', 'first_name', 'last_name')
+        return Response(list(members))
 
 
 class PersonCreateMembershipView(APIView):
