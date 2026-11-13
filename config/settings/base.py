@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'apps.attendance.apps.AttendanceConfig',
     'apps.ecodim.apps.EcodimConfig',
     'apps.finance.apps.FinanceConfig',
+    'apps.communication.apps.CommunicationConfig',
     'apps.pastoral.apps.PastoralConfig',
     'apps.tasks.apps.TasksConfig',
     'apps.platform.apps.PlatformConfig',

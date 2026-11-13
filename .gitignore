@@ -1,0 +1,24 @@
+# Python bytecode and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+env/
+ENV/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+coverage.xml
+
+# Local Django data and environment files
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+.env
